@@ -26,18 +26,4 @@ app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
 
-// ฟังก์ชั่นสำหรับทดสอบเชื่อมต่อฐานข้อมูล
-async function testDbConnection() {
-  try {
-    const result1 = await poolCustomer.query('SELECT NOW()');
-    const result2 = await poolTracking.query('SELECT NOW()');
-    console.log('Database connection successful:', result1.rows, result2.rows);
-  } catch (err) {
-    console.error('Database connection error:', err);
-  } finally {
-    poolCustomer.end();
-    poolTracking.end();
-  }
-}
 
-testDbConnection();
