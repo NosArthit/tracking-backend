@@ -1,18 +1,23 @@
 // customerAPI.js
 const express = require('express');
 const bcrypt = require('bcrypt');
+const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const { poolCustomer } = require('./db'); // เปลี่ยนจาก dbCustomer เป็น db ตามการรวมไฟล์
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 const router = express.Router();
 const JWT_SECRET = 'your_jwt_secret_key'; // ควรเก็บเป็นความลับและไม่ควรเขียนตรงนี้ในโค้ดจริง
+const saltRounds = parseInt(process.env.SALT_ROUNDS);
 
 // ฟังก์ชั่นสำหรับการสร้าง customer_id
 async function generateCustomerId() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0'); // เดือน (มกราคม = 01)
   const year = String(now.getFullYear()).slice(-2); // ปี (เช่น 2023 = 23)
-  const prefix = `${month}${year}`;
+  const prefix = `${year}${month}`;
 
   // ค้นหาค่า customer_id ล่าสุดที่มี prefix เดียวกัน
   const query = `
@@ -30,11 +35,11 @@ async function generateCustomerId() {
     const lastSeq = parseInt(lastId.slice(-4), 10);
     nextId = (lastSeq + 1) % 10000; // วนกลับที่ 0001 เมื่อถึง 9999
   }
-  const customerId = `${prefix}${String(nextId).padStart(4, '0')}`;
+  const customerId = `${prefix}${'00'}${String(nextId).padStart(4, '0')}`;
   return customerId;
 }
 
-// ฟังก์ชั่นสำหรับการ register
+// register
 router.post('/register', async (req, res) => {
   const { firstname, lastname, company, address, city, state, country, postal_code, phone, email, password } = req.body;
 
@@ -44,7 +49,7 @@ router.post('/register', async (req, res) => {
 
   const customer_id = await generateCustomerId(); // สร้าง customer_id
 
-  const hashedPassword = await bcrypt.hash(password, 10); // hash รหัสผ่าน
+  const hashedPassword = await bcrypt.hash(password, saltRounds); // hash รหัสผ่าน
 
   const now = new Date();
   const dateValue = now.toISOString().split('T')[0]; // แปลงเป็น yyyy-mm-dd
@@ -65,7 +70,9 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// ฟังก์ชั่นสำหรับการ login
+
+//login
+/*
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -97,26 +104,84 @@ router.post('/login', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+*/
 
-// ฟังก์ชั่นสำหรับการ authentication
-router.get('/auth', (req, res) => {
-  const token
+//Login
+router.post('/login', async(req, res) => {
+  const { email, password } = req.body;
 
- = req.headers['authorization'];
-
-  if (!token) {
-    return res.status(401).send('Access Denied');
+  if (!email || !password) {
+    return res.status(400).send('Email and password are required');
   }
 
+  const selectQuery = 'SELECT * FROM customer_data WHERE email = $1';
+
   try {
-    const verified = jwt.verify(token, JWT_SECRET);
-    res.json(verified);
+    const result = await poolCustomer.query(selectQuery, [email]);
+
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+      const match = await bcrypt.compare(password, user.password)
+      if (match) {
+        const token = jwt.sign({email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        res.json({
+          succes: true,
+          message: "Login successful",
+          token: token,
+        });
+      } else {
+        res.status(401).json({
+          succes: false,
+          message: "login failed",
+        });
+      }
+      
+    } else {
+      res.status(401).json({
+        succes: false,
+        message: "login failed",
+      });
+    }
+    
   } catch (error) {
     console.error(error);
-    res.status(400).send('Invalid Token');
+    res.status(500).send('Internal Server Error');
   }
 });
 
+//verify token
+function verifyToken(req, res, next) {
+  const token = req.headers['authorization'];
+
+  if (typeof token !== 'undefined') {
+    jwt.verify(token, process.env.JWT_SECRET, (err, authData) => {
+      if (err) {
+        res.sendStatus(403);
+      } else {
+        req.authData = authData;
+        next();
+      }
+    });
+  } else {
+    res.sendStatus(403);
+  }
+}
+
+
+// Endpoint สำหรับดึงข้อมูล customer_id, firstname, lastname, company จากตาราง customer_data
+router.get('/users', verifyToken, async (req, res) => {
+  const selectQuery = 'SELECT customer_id, firstname, lastname, company FROM customer_data';
+
+  try {
+    const result = await poolCustomer.query(selectQuery);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+/*
 // ฟังก์ชั่นสำหรับการ recovery data
 router.post('/recover', async (req, res) => {
   const { email, phone } = req.body;
@@ -150,20 +215,7 @@ router.post('/recover', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
-
-// Endpoint สำหรับดึงข้อมูล customer_id, firstname, lastname, company จากตาราง customer_data
-router.get('/customers', async (req, res) => {
-  const selectQuery = 'SELECT customer_id, firstname, lastname, company FROM customer_data';
-
-  try {
-    const result = await poolCustomer.query(selectQuery);
-
-    res.json(result.rows);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Internal Server Error');
-  }
-});
+*/
 
 module.exports = router;
 
