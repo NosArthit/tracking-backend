@@ -1,92 +1,8 @@
-const { poolTracking } = require('./db');
-const { calculateCRC16, asciiToHex } = require('./utils');
+const { poolTracking } = require('./db'); // Import the poolTracking from db.js
 
-async function handleD(asciiData) {
+async function handleD(message) {
   const tableName = 'extended_data';
-  const message = asciiData.split('#');
-  const splitData = message[2].split(';');
 
-  // ตรวจสอบความถูกต้องของข้อมูลแต่ละ index
-  const time = splitData[0]+splitData[1];
-  const coordinates = splitData[2] + splitData[3] + splitData[4] + splitData[5];
-  const sca = splitData[6] + splitData[7] + splitData[8];
-  const satellites = splitData[9] + splitData[10];
-  const io = splitData[11] + splitData[12];
-  const adc = splitData[13];
-  const additional_params = splitData[15];
-
-  // คำนวณ CRC-16-IBM
-  const crcData = (splitData.slice(0, -1).join(';') + ';');
-  const crcValue = calculateCRC16(crcData);
-
-  // ตรวจสอบรูปแบบโครงสร้างเบื้องต้น
-  if (!asciiData.startsWith('#D#')) {
-    console.log('Invalid Login Package Structure');
-    return;
-  }
-
-  if (message.length < 3 || message[1] !== 'D') {
-    console.log('Invalid Data message format');
-    return;
-  }
-
-  if (splitData.length !== 17) {
-    console.log('Insufficient data');
-    return asciiToHex('#AD#-1');
-  }
-
-  if (!time) {
-    console.log('Incorrect time');
-    // ส่งกลับ #AL#0
-    return asciiToHex('#AD#0');
-  }
-
-  if (!coordinates) {
-    console.log('Error receiving coordinates');
-    // ส่งกลับ #AL#01
-    return asciiToHex('#AD#10');
-  }
-
-  if (!sca) {
-    console.log('Error receiving speed, course, or altitude');
-    // ส่งกลับ #AL#0
-    return asciiToHex('#AD#11');
-  }
-
-  if (!satellites) {
-    console.log('Error receiving the number of satellites or HDOP');
-    // ส่งกลับ #AL#01
-    return asciiToHex('#AD#12');
-  }
-
-  if (!io) {
-    console.log('Error receiving Inputs or Outputs');
-    // ส่งกลับ #AL#0
-    return asciiToHex('#AD#13');
-  }
-
-  if (!adc) {
-    console.log('Error receiving ADC');
-    // ส่งกลับ #AL#01
-    return asciiToHex('#AD#14');
-  }
-
-  if (!additional_params) {
-    console.log('Error receiving additional parameters');
-    // ส่งกลับ #AL#01
-    return asciiToHex('#AD#15');
-  }
-
-  if (splitData[splitData.length - 1].toString() === crcValue.toString()) {
-    //console.log('ascii data to CRC-16-IBM :', crcData);
-    console.log('CRC-16-IBM value:', crcValue);
-    console.log('Checksum verification error');
-    // ส่งกลับ #AL#10
-    return asciiToHex('#AD#16');
-  }
-
-  console.log('CRC verification passed');
-  // ส่งกลับ #AL#1
   try {
     const tableCheckQuery = `SELECT to_regclass('${tableName}')`;
     const tableCheckResult = await poolTracking.query(tableCheckQuery); // Use poolTracking instead of pool1
@@ -177,7 +93,6 @@ async function handleD(asciiData) {
   } catch (err) {
     console.error('Database error:', err);
   }
-  return asciiToHex('#AD#1');
 }
 
 module.exports = { handleD };

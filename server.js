@@ -1,8 +1,8 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
-const { poolCustomer, poolTracking } = require('./db'); // Import pools from db.js
-const customerAPI = require('./customerAPI'); // Import customerAPI
+const { poolUser, poolTracking } = require('./db'); // Import pools from db.js
+const userAPI = require('./userAPI'); // Import userAPI
 const trackingAPI = require('./trackingAPI'); // Import trackingAPI
 
 const app = express();
@@ -11,14 +11,14 @@ const port = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Middleware สำหรับเชื่อมต่อฐานข้อมูลใน customerAPI และ trackingAPI
+// Middleware สำหรับเชื่อมต่อฐานข้อมูลใน userAPI และ trackingAPI
 app.use((req, res, next) => {
-  req.poolCustomer = poolCustomer;
+  req.poolUser = poolUser;
   req.poolTracking = poolTracking;
   next();
 });
 
-app.use('/api/customers', customerAPI); // ใช้ customerAPI ที่ endpoint /api/customers
+app.use('/api/users', userAPI); // ใช้ userAPI ที่ endpoint /api/useres
 app.use('/api/tracking', trackingAPI); // ใช้ trackingAPI ที่ endpoint /api/tracking
 
 // เริ่ม server

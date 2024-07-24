@@ -1,5 +1,6 @@
 const net = require('net');
 const { handleTcpData } = require('./tcpDataHandler');
+const { asciiToHex, hexToAscii } = require('./utils');
 
 // สร้างเซิร์ฟเวอร์ TCP
 const server = net.createServer((socket) => {
@@ -14,7 +15,17 @@ const server = net.createServer((socket) => {
 
     try {
       // ส่งข้อมูล hex ที่รับมาจาก client ไปที่ handleTcpData
-      await handleTcpData(data);
+      const response = await handleTcpData(data);
+
+      if (response) {
+        // แปลง response จาก ASCII เป็น hex string
+        const hexResponse = asciiToHex(response);
+        console.log('Response :', hexToAscii(response));
+    
+        // ส่งข้อความตอบกลับไปยัง TCP module
+        socket.write(Buffer.from(hexResponse, 'hex'));
+      }
+      
     } catch (err) {
       console.error('Error handling TCP data:', err);
     }
@@ -37,4 +48,6 @@ const PORT = 8080;
 server.listen(PORT, HOST, () => {
   console.log(`Server listening on ${HOST}:${PORT}`);
 });
+
+
 
