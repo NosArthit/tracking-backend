@@ -1,5 +1,3 @@
-
-// userAPI.js
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const bodyParser = require('body-parser');
@@ -10,42 +8,66 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const router = express.Router();
-const JWT_SECRET = 'your_jwt_secret_key'; // ควรเก็บเป็นความลับและไม่ควรเขียนตรงนี้ในโค้ดจริง
+const JWT_SECRET = process.env.JWT_SECRET;
 const saltRounds = parseInt(process.env.SALT_ROUNDS);
 
 // ฟังก์ชั่นสำหรับการสร้าง user_id
 async function generateUserId(countryCode) {
   const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0'); // วัน
   const month = String(now.getMonth() + 1).padStart(2, '0'); // เดือน (มกราคม = 01)
   const year = String(now.getFullYear()).slice(-2); // ปี (เช่น 2023 = 23)
-  const prefix = `${year}${month}`;
+  const prefix = `${year}${month}${day}`;
 
-  // ค้นหาค่า user_id ล่าสุดที่มี prefix เดียวกัน
+  // ค้นหาค่า user_id ล่าสุดที่มีเลข 4 หลักสุดท้ายสูงที่สุด
   const query = `
-    SELECT user_id FROM user_data 
-    WHERE user_id LIKE $1 
-    ORDER BY user_id DESC 
-    LIMIT 1
+      SELECT RIGHT(user_id, 4) AS lastSeq 
+      FROM user_data 
+      ORDER BY RIGHT(user_id, 4)::int DESC 
+      LIMIT 1
   `;
-  const values = [`${prefix}${countryCode}%`];
 
-  const result = await poolUser.query(query, values);
-  let nextId = 1;
-  if (result.rows.length > 0) {
-    const lastId = result.rows[0].user_id;
-    const lastSeq = parseInt(lastId.slice(-4), 10);
-    nextId = (lastSeq + 1) % 10000; // วนกลับที่ 0001 เมื่อถึง 9999
+  try {
+      const result = await poolUser.query(query);
+
+      let nextId = 1;
+      if (result.rows.length > 0) {
+          const lastSeq = result.rows[0].lastseq; // ตรวจสอบว่า lastseq ถูกต้อง
+          nextId = parseInt(lastSeq, 10) + 1; // เพิ่มค่า 1
+          if (nextId > 9999) {
+              nextId = 1; // รีเซ็ตกลับไปที่ 1 ถ้าเกิน 9999
+          }
+      }
+
+      // สร้าง user_id ใหม่
+      const userId = `${prefix}${'00'}${countryCode}${String(nextId).padStart(4, '0')}`;
+      return userId;
+  } catch (error) {
+      console.error('Error generating user ID:', error);
+      throw error; // เพิ่มการจัดการข้อผิดพลาดที่นี่
   }
-  const userId = `${prefix}${'00'}${countryCode}${String(nextId).padStart(4, '0')}`;
-  return userId;
 }
 
-// register
+// Endpoint สำหรับการลงทะเบียนผู้ใช้
 router.post('/register', async (req, res) => {
   const { firstname, lastname, company, address, city, state, country, postal_code, phone, email, password } = req.body;
 
   if (!firstname || !lastname || !company || !address || !city || !state || !country || !postal_code || !phone || !email || !password) {
     return res.status(400).send('All fields are required');
+  }
+
+  // ตรวจสอบว่า email มีอยู่ในฐานข้อมูลหรือไม่
+  const checkEmailQuery = `
+    SELECT email FROM user_data WHERE email = $1
+  `;
+  try {
+    const emailResult = await poolUser.query(checkEmailQuery, [email]);
+    if (emailResult.rows.length > 0) {
+      return res.status(400).send('Email already registered');
+    }
+  } catch (error) {
+    //console.error(error);
+    return res.status(500).send('Internal Server Error');
   }
 
   // สมมุติว่าชื่อย่อของประเทศอยู่ในตัวแปร `countryCode`
@@ -61,14 +83,14 @@ router.post('/register', async (req, res) => {
   const timeValue = now.toLocaleTimeString('en-GB', options); // hh:mm:ss
 
   const insertQuery = `
-    INSERT INTO user_data (date, time, user_id, firstname, lastname, company, address, city, state, country, postal_code, phone, email, password)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    INSERT INTO user_data (date, time, user_id, firstname, lastname, company, address, city, state, country, postal_code, phone, email, password, status, date_info_update, time_info_update)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, $1, $2)
   `;
   const values = [dateValue, timeValue, user_id, firstname, lastname, company, address, city, state, country, postal_code, phone, email, hashedPassword];
 
   try {
     await poolUser.query(insertQuery, values);
-    res.status(201).send('User registered successfully');
+    res.status(201).send(`User registered successfully with user_id:  ${user_id}`);
   } catch (error) {
     console.error(error);
     res.status(500).send('Internal Server Error');
@@ -206,9 +228,9 @@ router.get('/datas', verifyToken, async (req, res) => {
   }
 });
 
-// Endpoint สำหรับดึงข้อมูล user logined: user_id, firstname, lastname, company จากตาราง user_data
+// Endpoint สำหรับดึงข้อมูล user logined: all data จากตาราง user_data
 router.get('/data', verifyToken, async (req, res) => {
-  const selectQuery = 'SELECT user_id, firstname, lastname, company FROM user_data WHERE email = $1';
+  const selectQuery = 'SELECT user_id, firstname, lastname, company, address, city, state, country, postal_code, phone, email FROM user_data WHERE email = $1';
   const values = [req.authData.email];
 
   try {
@@ -218,6 +240,37 @@ router.get('/data', verifyToken, async (req, res) => {
     } else {
       res.status(404).send('User not found');
     }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// Endpoint สำหรับอัปเดตข้อมูลของ user logined
+router.put('/update', verifyToken, async (req, res) => {
+  const { firstname, lastname, company, address, city, state, country, postal_code, phone, email } = req.body;
+  const user_id = req.authData.user_id;
+
+  if (!firstname || !lastname || !company || !address || !city || !state || !country || !postal_code || !phone || !email) {
+    return res.status(400).send('All fields are required');
+  }
+
+  const now = new Date();
+  const options = { timeZone: 'Asia/Bangkok' };
+
+  const dateValue = now.toLocaleDateString('en-GB', options); // yyyy-mm-dd
+  const timeValue = now.toLocaleTimeString('en-GB', options); // hh:mm:ss
+
+  const updateQuery = `
+    UPDATE user_data
+    SET firstname = $1, lastname = $2, company = $3, address = $4, city = $5, state = $6, country = $7, postal_code = $8, phone = $9, email = $10, date_info_update = $11, time_info_update = $12
+    WHERE user_id = $13
+  `;
+  const values = [firstname, lastname, company, address, city, state, country, postal_code, phone, email, dateValue, timeValue, user_id];
+
+  try {
+    await poolUser.query(updateQuery, values);
+    res.status(200).send('User data updated successfully');
   } catch (error) {
     console.error(error);
     res.status(500).send('Internal Server Error');

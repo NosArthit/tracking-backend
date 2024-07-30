@@ -1,29 +1,29 @@
-# เลือก Base Image
-FROM node:22.5.1
+# Selete Base Image
+FROM --platform=linux/amd64 node:22.5.1
 
-# สร้างโฟลเดอร์สำหรับแอป
+# Create app directory
 WORKDIR /usr/src/app
 
-# คัดลอกไฟล์ package.json และ package-lock.json
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
-# ลบ node_modules และ package-lock.json หากมีอยู่
+# Delete node_modules and package-lock.json (if have)
 RUN rm -rf node_modules package-lock.json
 
-# ติดตั้ง dependencies
+# Install app dependencies
 RUN npm install
 
-# ติดตั้ง bcrypt ใหม่
+# Install bcrypt
 RUN npm install bcrypt
 
-# คัดลอกไฟล์ทั้งหมดลงใน image
+# Bundle app source
 COPY . .
 
-# เปิดพอร์ตที่ต้องการใช้สำหรับการเชื่อมต่อ
+# Expose ports for HTTP and TCP
 EXPOSE 8080
 EXPOSE 3000
 
-# คำสั่งสำหรับเริ่มต้นแอป
+# Start the app
 CMD ["node", "tcpserver.js"]
 
 

@@ -7,17 +7,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    platform: linux/amd64
     command: node tcpserver.js
     container_name: tcp_server_container
-
-  dbservice:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    command: node db.js
-    container_name: db_service_container
 
   serverservice:
     build:
@@ -25,11 +17,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    platform: linux/amd64
     command: node server.js
     container_name: server_service_container
-
-
-
-
 
 

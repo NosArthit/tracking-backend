@@ -1,8 +1,9 @@
-// server.js
+//server.js
 const express = require('express');
 const cors = require('cors');
 const { poolUser, poolTracking } = require('./db'); // Import pools from db.js
 const userAPI = require('./userAPI'); // Import userAPI
+const adminAPI = require('./adminAPI'); // Import adminAPI
 const trackingAPI = require('./trackingAPI'); // Import trackingAPI
 
 const app = express();
@@ -18,7 +19,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/api/users', userAPI); // ใช้ userAPI ที่ endpoint /api/useres
+app.use('/api/users', userAPI); // ใช้ userAPI ที่ endpoint /api/users
+app.use('/api/admin', adminAPI); // ใช้ adminAPI ที่ endpoint /api/admin
 app.use('/api/tracking', trackingAPI); // ใช้ trackingAPI ที่ endpoint /api/tracking
 
 // เริ่ม server
